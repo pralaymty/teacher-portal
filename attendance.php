@@ -21,11 +21,11 @@ foreach ($db->fetchAll(
 $holidayTable = 'holiday_' . date('Y');
 $holidayRows = [];
 if ($db->fetchColumnList('SHOW TABLES') && in_array($holidayTable, $db->fetchColumnList('SHOW TABLES'), true)) {
-    $holidayRows = $db->fetchAll('SELECT date FROM `' . $holidayTable . '`');
+    $holidayRows = $db->fetchAll('SELECT date, name FROM `' . $holidayTable . '`');
 }
 $holidayDates = [];
 foreach ($holidayRows as $holiday) {
-    $holidayDates[$holiday['date']] = true;
+    $holidayDates[$holiday['date']] = isset($holiday['name']) && $holiday['name'] !== '' ? $holiday['name'] : 'Holiday';
 }
 
 $monthLabel = $monthDate->format('F Y');
@@ -130,7 +130,7 @@ if ($endWeekday !== 6) {
                 ?>
                 <div class="day-item">
                     <div class="calendar-day <?= $isHoliday ? 'holiday' : ($hasAttendance ? 'present' : '') ?> <?= $isFuture ? 'future' : '' ?> <?= $isSunday ? 'sunday' : '' ?>" data-date="<?= $dayKey ?>">
-                        <?php if ($isHoliday): ?><span class="holiday-icon" title="Holiday"><i class="bi bi-calendar-event-fill"></i></span><?php endif; ?>
+                        <?php if ($isHoliday): ?><span class="holiday-icon" title="<?= e($holidayDates[$dayKey]) ?>"><i class="bi bi-calendar-event-fill"></i></span><?php endif; ?>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="day-number <?= $isCurrentMonth ? '' : 'text-muted' ?>"><?= $current->format('d') ?></span>
                             <?php if ($isHoliday): ?><span class="badge bg-danger">Holiday</span><?php endif; ?>

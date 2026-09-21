@@ -205,6 +205,24 @@ function ensurePortalSchema(): void
     $tables = $db->fetchColumnList('SHOW TABLES');
 
     if (!in_array('teacher_attendance', $tables, true)) {
-        $db->execute(file_get_contents(__DIR__ . '/../database/teacher_portal_tables.sql'));
+        $sql = file_get_contents(__DIR__ . '/../database/teacher_portal_tables.sql');
+        if ($sql === false) {
+            trigger_error('Failed to read database schema file', E_USER_WARNING);
+            return;
+        }
+
+        $statements = array_filter(array_map('trim', explode(';', $sql)));
+
+        foreach ($statements as $stmt) {
+            if ($stmt === '') {
+                continue;
+            }
+
+            try {
+                $db->execute($stmt);
+            } catch (Throwable $e) {
+                trigger_error('Error creating schema: ' . $e->getMessage(), E_USER_WARNING);
+            }
+        }
     }
 }
