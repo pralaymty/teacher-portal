@@ -16,7 +16,11 @@ foreach (glob(__DIR__ . '/services/*.php') as $file) {
     require_once $file;
 }
 
-ensurePortalSchema();
+try {
+    ensurePortalSchema();
+} catch (Throwable $e) {
+    trigger_error('Error during schema ensure: ' . $e->getMessage(), E_USER_WARNING);
+}
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

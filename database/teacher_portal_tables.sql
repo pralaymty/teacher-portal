@@ -1,3 +1,25 @@
+CREATE TABLE IF NOT EXISTS `user` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `fname` VARCHAR(100) NOT NULL,
+  `lname` VARCHAR(100) NOT NULL,
+  `email` VARCHAR(255) NOT NULL,
+  `password` VARCHAR(255) NOT NULL,
+  `user_type` INT NOT NULL DEFAULT 3,
+  `status` TINYINT(1) NOT NULL DEFAULT 1,
+  `gender` ENUM('Male','Female','Other') NULL,
+  `last_login_at` DATETIME NULL,
+  `last_login_ip` VARCHAR(45) NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `user` (`fname`, `lname`, `email`, `password`, `user_type`, `status`)
+VALUES
+  ('Admin', 'User', 'admin@localhost', '21232f297a57a5a743894a0e4a801fc3', 1, 1)
+ON DUPLICATE KEY UPDATE `email` = VALUES(`email`);
+
 CREATE TABLE IF NOT EXISTS `teacher_attendance` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT UNSIGNED NOT NULL,

@@ -201,7 +201,13 @@ function isValidLongitude(string $value): bool
 
 function ensurePortalSchema(): void
 {
-    $db = new DatabaseService();
+    try {
+        $db = new DatabaseService();
+    } catch (Throwable $e) {
+        trigger_error('Database unavailable in ensurePortalSchema: ' . $e->getMessage(), E_USER_WARNING);
+        return;
+    }
+
     $tables = $db->fetchColumnList('SHOW TABLES');
 
     if (!in_array('teacher_attendance', $tables, true)) {

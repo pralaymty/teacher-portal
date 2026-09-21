@@ -14,7 +14,7 @@ class AuthService
     public function login(string $email, string $password): array
     {
         $user = $this->db->fetchOne(
-            'SELECT * FROM user WHERE email = ? LIMIT 1',
+            'SELECT * FROM `user` WHERE email = ? LIMIT 1',
             [$email]
         );
 
@@ -49,7 +49,7 @@ class AuthService
         $_SESSION['is_logged_in'] = true;
 
         $this->db->execute(
-            'UPDATE user SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = ? WHERE id = ?',
+            'UPDATE `user` SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = ? WHERE id = ?',
             [getClientIpAddress(), (int) $user['id']]
         );
     }
