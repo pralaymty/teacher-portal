@@ -24,7 +24,10 @@ return [
         'developer_admin_user_type' => 6,
     ],
     'attendance' => [
-        'entry_time' => '09:30',
+        'entry_start_time' => '10:30',
+        'entry_end_time' => '11:00',
+        'exit_start_time' => '16:00',
+        'exit_end_time' => '16:30',
     ],
     'timezone' => 'Asia/Kolkata',
 ];

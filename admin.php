@@ -19,11 +19,13 @@ $approvedLeaves = (int) ($db->fetchOne('SELECT COUNT(*) AS total FROM teacher_le
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard | Teachers Employee Portal</title>
+    <title>Admin Dashboard | NNV-Teachers Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-<div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+<main id="portal-content" class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1">Admin Dashboard</h2>
@@ -78,6 +80,6 @@ $approvedLeaves = (int) ($db->fetchOne('SELECT COUNT(*) AS total FROM teacher_le
             </div>
         </div>
     </div>
-</div>
+</main>
 </body>
 </html>

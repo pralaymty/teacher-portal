@@ -8,7 +8,7 @@ $applications = $db->fetchAll(
     'SELECT l.*, t.name AS leave_type FROM teacher_leave_applications l LEFT JOIN teacher_leave_types t ON t.id = l.leave_type_id WHERE l.user_id = ? ORDER BY l.created_at DESC',
     [$userId]
 );
-$leaveTypes = $db->fetchAll('SELECT * FROM teacher_leave_types WHERE is_active = 1 ORDER BY name ASC');
+$leaveTypes = (new LeaveSettingsService($db))->getTypes((int) $_SESSION['user_type']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
@@ -27,15 +27,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('leave.php');
     }
 
-    $leaveType = $db->fetchOne('SELECT * FROM teacher_leave_types WHERE id = ? LIMIT 1', [$leaveTypeId]);
+    $leaveType = null;
+    foreach ($leaveTypes as $type) {
+        if ((int) $type['id'] === $leaveTypeId) {
+            $leaveType = $type;
+            break;
+        }
+    }
     if (!$leaveType) {
         $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Selected leave type is invalid.'];
         redirect('leave.php');
     }
 
     $gender = (string) ($db->fetchOne('SELECT gender FROM user WHERE id = ? LIMIT 1', [$userId])['gender'] ?? '');
-    if ($leaveType['gender_restriction'] === 'Female' && strtolower($gender) !== 'female') {
-        $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Maternity leave is available only for female teachers.'];
+    $gender = ['M' => 'Male', 'F' => 'Female'][strtoupper(trim($gender))] ?? $gender;
+    if ($leaveType['gender_restriction'] !== 'All' && strcasecmp($gender, $leaveType['gender_restriction']) !== 0) {
+        $_SESSION['flash'] = ['type' => 'danger', 'message' => 'You are not eligible for this leave type based on its gender restriction.'];
         redirect('leave.php');
     }
 
@@ -58,17 +65,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['flash'] = ['type' => 'success', 'message' => 'Leave application submitted successfully.'];
     redirect('leave.php');
 }
+
+$leaveOverview = null;
+if ((int) $_SESSION['user_type'] !== 1) {
+    $currentUser = $db->fetchOne(
+        'SELECT id, user_type, gender FROM user WHERE id = ?',
+        [$userId]
+    );
+    if (!$currentUser) {
+        http_response_code(404);
+        exit('User not found.');
+    }
+    $overviewTypes = $db->fetchAll(
+        'SELECT id, name, user_type_id, quota, gender_restriction, is_active FROM teacher_leave_types ORDER BY name, id'
+    );
+    $leaveOverview = (new LeaveOverviewService())->summarize([$currentUser], $overviewTypes, $applications)[0];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leave Management | Teachers Employee Portal</title>
+    <title>Leave Management | NNV-Teachers Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-<div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+<main id="portal-content" class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1">Leave Management</h2>
@@ -78,6 +103,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     <?php if (!empty($_SESSION['flash'])): $flash = $_SESSION['flash']; unset($_SESSION['flash']); ?>
         <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
+    <?php endif; ?>
+
+    <?php if ($leaveOverview !== null): ?>
+        <section class="mb-4" aria-labelledby="leave-overview-heading">
+            <h3 id="leave-overview-heading" class="h5 mb-3">My Leave Overview <small class="text-muted fw-normal">(All time, days)</small></h3>
+            <div class="row g-3 mb-4">
+                <?php foreach (['quota' => 'Current Quota', 'taken' => 'Taken (Approved)', 'pending' => 'Pending', 'remaining' => 'Remaining'] as $key => $label): ?>
+                    <div class="col-md-3">
+                        <div class="card h-100"><div class="card-body">
+                            <div class="text-muted small"><?= e($label) ?></div>
+                            <div class="fs-4 fw-bold mt-2"><?= number_format($leaveOverview['totals'][$key], 2) ?></div>
+                        </div></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <?php if (!$leaveOverview['balances']): ?>
+                <p class="text-muted">No leave quota assigned.</p>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead><tr>
+                            <th scope="col">Leave Type</th><th scope="col">Quota</th>
+                            <th scope="col">Taken (Approved)</th><th scope="col">Pending</th><th scope="col">Remaining</th>
+                        </tr></thead>
+                        <tbody>
+                            <?php foreach ($leaveOverview['balances'] as $balance): ?>
+                                <tr>
+                                    <td><?= e($balance['name']) ?><?php if ($balance['historical']): ?> <span class="badge bg-secondary">Historical</span><?php endif; ?></td>
+                                    <?php foreach (array_keys($leaveOverview['totals']) as $key): ?>
+                                        <td class="<?= $key === 'remaining' ? 'fw-bold' : '' ?>"><?= number_format($balance[$key], 2) ?></td>
+                                    <?php endforeach; ?>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </section>
     <?php endif; ?>
 
     <div class="row g-4 mb-4">
@@ -93,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <select class="form-select" name="leave_type_id" required>
                                     <option value="">Select leave type</option>
                                     <?php foreach ($leaveTypes as $type): ?>
-                                        <option value="<?= (int) $type['id'] ?>"><?= e($type['name']) ?></option>
+                                        <option value="<?= (int) $type['id'] ?>"><?= e($type['name']) ?> (Quota: <?= e((string) $type['quota']) ?> days)</option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -137,6 +200,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
         </div>
     </div>
-</div>
+</main>
 </body>
 </html>

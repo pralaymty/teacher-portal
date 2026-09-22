@@ -61,6 +61,23 @@ class DatabaseService
         return (int) $this->conn->insert_id;
     }
 
+    /** Commit related writes together, or roll them all back on failure. */
+    public function transaction(callable $operation): void
+    {
+        if (!$this->conn->begin_transaction()) {
+            throw new RuntimeException('Could not start database transaction.');
+        }
+        try {
+            $operation();
+            if (!$this->conn->commit()) {
+                throw new RuntimeException('Could not commit database transaction.');
+            }
+        } catch (Throwable $error) {
+            $this->conn->rollback();
+            throw $error;
+        }
+    }
+
     public function fetchColumnList(string $sql): array
     {
         $result = $this->conn->query($sql);

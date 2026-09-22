@@ -14,13 +14,19 @@ $attendanceToday = $db->fetchOne(
     'SELECT * FROM teacher_attendance WHERE user_id = ? AND attendance_date = ? LIMIT 1',
     [$userId, $currentDate]
 );
+$attendanceOpenNow = isAttendanceOpenNow();
+$attendanceWindowMessage = getAttendanceWindowMessage();
+$hasLogoff = $attendanceToday && $attendanceToday['logoff_time'] !== null;
+$showLogoff = $attendanceToday && !$hasLogoff;
+$logoffOpenNow = isAttendanceLogoffOpenNow();
+$attendanceActionEnabled = $attendanceToday ? ($showLogoff && $logoffOpenNow) : $attendanceOpenNow;
 
 $presentThisMonth = (int) $db->fetchOne(
     'SELECT COUNT(*) AS total FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?',
     [$userId, date('Y-m-01'), date('Y-m-t')]
 )['total'];
 
-$leaveQuota = $db->fetchAll('SELECT * FROM teacher_leave_types WHERE is_active = 1 ORDER BY name ASC');
+$leaveQuota = (new LeaveSettingsService($db))->getTypes($userType);
 $leaveUsed = 0.0;
 $leavePending = 0.0;
 $leaveApproved = 0.0;
@@ -53,43 +59,13 @@ $notifications = $db->fetchAll(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard | Teachers Employee Portal</title>
+    <title>Dashboard | NNV-Teachers Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        body { background:#f4f7fb; }
-        .sidebar { min-height: 100vh; background: linear-gradient(180deg,#0b1f3a,#132f55); }
-        .nav-link { color: rgba(255,255,255,.8); }
-        .nav-link:hover, .nav-link.active { color: white; background: rgba(255,255,255,0.08); }
-        .card-stat { border:0; border-radius:18px; box-shadow: 0 8px 28px rgba(15,23,42,.06); }
-        .present-button { font-size: 1.2rem; padding: 1rem 2rem; border-radius: 16px; }
-        .status-pill { border-radius: 50px; }
-    </style>
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-    <div class="container-fluid p-0">
-        <div class="row g-0">
-            <aside class="col-lg-2 sidebar text-white p-3">
-                <div class="d-flex align-items-center mb-4">
-                    <div class="rounded-3 bg-primary bg-gradient p-2 me-2"><i class="bi bi-mortarboard-fill fs-4"></i></div>
-                    <div>
-                        <h5 class="mb-0">Teacher Portal</h5>
-                    </div>
-                </div>
-                <nav class="nav flex-column gap-1">
-                    <a class="nav-link active rounded" href="dashboard.php"><i class="bi bi-house-door me-2"></i>Dashboard</a>
-                    <a class="nav-link rounded" href="attendance.php"><i class="bi bi-calendar-check me-2"></i>Attendance</a>
-                    <a class="nav-link rounded" href="leave.php"><i class="bi bi-file-earmark-text me-2"></i>Leave</a>
-                    <a class="nav-link rounded" href="profile.php"><i class="bi bi-person me-2"></i>Profile</a>
-                    <?php if (isAdminUser()): ?>
-                        <a class="nav-link rounded" href="admin.php"><i class="bi bi-speedometer2 me-2"></i>Admin</a>
-                        <a class="nav-link rounded" href="settings.php"><i class="bi bi-gear me-2"></i>Settings</a>
-                    <?php endif; ?>
-                    <a class="nav-link rounded" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>Logout</a>
-                </nav>
-            </aside>
-            <main class="col-lg-10">
-                <div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+    <main id="portal-content" class="container py-4">
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <div>
                             <h2 class="fw-bold mb-1">Welcome, <?= e($teacherName) ?></h2>
@@ -152,11 +128,20 @@ $notifications = $db->fetchAll(
                                         <span id="attendanceSectionBadge" class="badge bg-<?= $attendanceToday ? 'success' : 'warning' ?> status-pill"><?= $attendanceToday ? 'Present' : 'Not Marked' ?></span>
                                     </div>
                                     <div class="text-center py-4">
-                                        <button type="button" id="markAttendanceBtn" class="btn btn-success btn-lg present-button w-100" data-user-id="<?= $userId ?>" <?= $attendanceToday ? 'disabled' : '' ?>>
+                                        <button type="button" id="markAttendanceBtn" class="btn btn-<?= $showLogoff ? 'outline-danger' : 'success' ?> btn-lg present-button w-100" data-action="<?= $showLogoff ? 'logoff' : 'mark' ?>" <?= !$attendanceActionEnabled ? 'disabled' : '' ?>>
                                             <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
-                                            <i class="bi bi-check2-circle me-2 icon-check"></i>
-                                            <span class="btn-text"><?= $attendanceToday ? 'Present Today' : 'Mark Present' ?></span>
+                                            <i class="bi <?= $showLogoff ? 'bi-box-arrow-right' : 'bi-check2-circle' ?> me-2 icon-check"></i>
+                                            <span class="btn-text"><?= $hasLogoff ? 'Logged Off Today' : ($showLogoff ? 'Logoff' : ($attendanceOpenNow ? 'Mark Present' : 'Attendance Closed')) ?></span>
                                         </button>
+                                        <?php if ($attendanceToday): ?>
+                                            <div class="small text-muted mt-2">Login: <?= e(formatTime($attendanceToday['attendance_time'])) ?><?php if ($hasLogoff): ?> &middot; Logoff: <?= e(formatTime($attendanceToday['logoff_time'])) ?><?php endif; ?></div>
+                                        <?php endif; ?>
+                                        <?php if ($showLogoff && !$logoffOpenNow): ?>
+                                            <div class="text-muted small mt-3"><?= e(getAttendanceLogoffWindowMessage()) ?></div>
+                                        <?php endif; ?>
+                                        <?php if (!$attendanceToday && !$attendanceOpenNow): ?>
+                                            <div class="text-muted small mt-3"><?= e($attendanceWindowMessage) ?></div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -192,86 +177,9 @@ $notifications = $db->fetchAll(
                             <?php endif; ?>
                         </div>
                     </div>
-                </div>
-            </main>
-        </div>
-    </div>
+    </main>
 
-    <script src="https://code.jquery.com/jquery-3.12.12.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script>
-        $('#markAttendanceBtn').on('click', function () {
-            const btn = $(this);
-            if (btn.is(':disabled')) return;
-
-            // show loader
-            btn.prop('disabled', true);
-            btn.find('.spinner-border').removeClass('d-none');
-            const originalText = btn.find('.btn-text').text();
-            btn.find('.btn-text').text('Marking attendance...');
-
-            if (!navigator.geolocation) {
-                alert('Geolocation is not supported by this browser.');
-                btn.find('.spinner-border').addClass('d-none');
-                btn.prop('disabled', false);
-                btn.find('.btn-text').text(originalText);
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(function (position) {
-                $.ajax({
-                    url: 'attendance-mark.php',
-                    type: 'POST',
-                    data: {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                        csrf_token: '<?= e($_SESSION['csrf_token'] ?? '') ?>'
-                    },
-                    dataType: 'json'
-                }).done(function (response) {
-                    if (response && response.success) {
-                        alert(response.message);
-                        btn.find('.spinner-border').addClass('d-none');
-                        btn.prop('disabled', true);
-                        btn.find('.btn-text').text('Present Today');
-                        // update UI elements without reload
-                        $('#todayStatusText').text('Present');
-                        $('#todayStatusBadge').removeClass('bg-secondary').addClass('bg-success');
-                        $('#attendanceSectionBadge').removeClass('bg-warning').addClass('bg-success').text('Present');
-                        const pc = $('#presentCount');
-                        const current = parseInt(pc.text() || '0', 10) || 0;
-                        pc.text(current + 1);
-                    } else {
-                        alert((response && response.message) ? response.message : 'Unable to mark attendance.');
-                        btn.find('.spinner-border').addClass('d-none');
-                        btn.prop('disabled', false);
-                        btn.find('.btn-text').text(originalText);
-                    }
-                }).fail(function (jqXHR) {
-                    let msg = 'Unable to mark attendance right now. Please try again.';
-                    try {
-                        const parsed = jqXHR.responseJSON || JSON.parse(jqXHR.responseText || '{}');
-                        if (parsed && parsed.message) msg = parsed.message;
-                    } catch (e) {
-                        // ignore parse errors
-                    }
-                    alert(msg);
-                    btn.find('.spinner-border').addClass('d-none');
-                    btn.prop('disabled', false);
-                    btn.find('.btn-text').text(originalText);
-                });
-
-            }, function (error) {
-                let message = 'Location access is required to mark attendance.';
-                if (error && error.code === 1) message = 'Location permission denied. Please allow location access to mark attendance.';
-                if (error && error.code === 2) message = 'Location information is unavailable at the moment.';
-                if (error && error.code === 3) message = 'Location request timed out. Please try again.';
-                alert(message);
-                btn.find('.spinner-border').addClass('d-none');
-                btn.prop('disabled', false);
-                btn.find('.btn-text').text(originalText);
-            }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-        });
-    </script>
+    <?php require __DIR__ . '/app/views/attendance-action-script.php'; ?>
 </body>
 </html>

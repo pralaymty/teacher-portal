@@ -11,11 +11,15 @@ $startDay = $startOfMonth->format('Y-m-01');
 $endDay = $startOfMonth->format('Y-m-t');
 
 $attendanceMap = [];
+$schoolLocation = SchoolLocationService::settings();
 foreach ($db->fetchAll(
-    'SELECT id, attendance_date, attendance_time FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?',
+    'SELECT id, attendance_date, attendance_time, latitude, longitude, logoff_time, logoff_latitude, logoff_longitude FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?',
     [$userId, $startDay, $endDay]
 ) as $row) {
-    $attendanceMap[$row['attendance_date']] = ['id' => $row['id'], 'time' => $row['attendance_time']];
+    $attendanceMap[$row['attendance_date']] = ['id' => $row['id'], 'time' => $row['attendance_time'],
+        'location' => SchoolLocationService::assess($row['latitude'], $row['longitude'], $schoolLocation),
+        'logoff' => $row['logoff_time'] === null ? null : ['time' => $row['logoff_time'],
+            'location' => SchoolLocationService::assess($row['logoff_latitude'], $row['logoff_longitude'], $schoolLocation)]];
 }
 
 $holidayTable = 'holiday_' . date('Y');
@@ -48,62 +52,25 @@ if ($endWeekday !== 6) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance | Teachers Employee Portal</title>
+    <title>Attendance | NNV-Teachers Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        body { background:#f4f7fb; }
-        /* Classic, eye-catching calendar */
-        .calendar-day {
-            min-height: 110px;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            background: #ffffff;
-            box-shadow: 0 1px 3px rgba(16,24,40,0.04);
-            transition: transform .08s ease, box-shadow .08s ease;
-            padding: 12px;
-        }
-        .calendar-day:hover { transform: translateY(-4px); box-shadow: 0 6px 20px rgba(16,24,40,0.08); }
-        .calendar-day.future { opacity: 0.5; }
-        .calendar-day.holiday { background: #fff3f3; border-color: #f8c7c7; position:relative; }
-        .calendar-day.holiday .day-number { background:#c82333; color:#fff; }
-        .holiday-icon { position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; background:#dc3545; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; }
-        .calendar-day.present { background: #ecfff2; border-color: #a3e0b2; }
-        .calendar-day.sunday { background: linear-gradient(180deg,#fff6f6,#fff); border-color: #f5c6cb; }
-        .day-number { font-weight: 700; display:inline-block; padding:6px 10px; border-radius:6px; }
-        .calendar-day.sunday .day-number { background:#dc3545; color:#fff; }
-        .weekday-headers { gap: .5rem; }
-        .weekday-headers .col { padding: .35rem .5rem; border-radius: 6px; }
-        .weekday-headers .col:first-child { color: #dc3545; font-weight:700; }
-        .attendance-label { font-size: 0.76rem; }
-        /* Calendar grid: responsive columns */
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.6rem; }
-        .day-item { }
-        @media (max-width: 992px) {
-            .calendar-grid { grid-template-columns: repeat(5, 1fr); }
-            .calendar-day { min-height: 100px; }
-        }
-        @media (max-width: 768px) {
-            .calendar-grid { grid-template-columns: repeat(3, 1fr); }
-            .calendar-day { min-height: 90px; }
-        }
-        @media (max-width: 576px) {
-            .calendar-grid { grid-template-columns: repeat(2, 1fr); }
-            .calendar-day { min-height: 80px; }
-        }
-    </style>
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-<div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+<main id="portal-content" class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1">Attendance</h2>
             <p class="text-muted mb-0">Teacher attendance tracker</p>
         </div>
-        <div class="btn-group">
-            <a href="attendance.php?month=<?= date('Y-m', strtotime('-1 month', strtotime($currentMonth . '-01'))) ?>" class="btn btn-outline-secondary">Previous</a>
-            <a href="attendance.php?month=<?= date('Y-m') ?>" class="btn btn-outline-secondary">Current</a>
-            <a href="attendance.php?month=<?= date('Y-m', strtotime('+1 month', strtotime($currentMonth . '-01'))) ?>" class="btn btn-outline-secondary">Next</a>
+        <div class="d-flex gap-2">
+            <a href="<?= isAdminUser() ? 'admin.php' : 'dashboard.php' ?>" class="btn btn-outline-secondary">Back</a>
+            <div class="btn-group">
+                <a href="attendance.php?month=<?= date('Y-m', strtotime('-1 month', strtotime($currentMonth . '-01'))) ?>" class="btn btn-outline-secondary">Previous</a>
+                <a href="attendance.php?month=<?= date('Y-m') ?>" class="btn btn-outline-secondary">Current</a>
+                <a href="attendance.php?month=<?= date('Y-m', strtotime('+1 month', strtotime($currentMonth . '-01'))) ?>" class="btn btn-outline-secondary">Next</a>
+            </div>
         </div>
     </div>
 
@@ -116,7 +83,8 @@ if ($endWeekday !== 6) {
     <div class="card border-0 shadow-sm">
         <div class="card-body p-4">
             <h4 class="mb-3"><?= e($monthLabel) ?></h4>
-            <div class="row text-center text-uppercase small text-muted mb-2 weekday-headers">
+            <div class="calendar-scroll" tabindex="0" role="region" aria-label="Attendance calendar">
+<div class="row text-center text-uppercase small text-muted mb-2 weekday-headers">
                 <div class="col">Sun</div><div class="col">Mon</div><div class="col">Tue</div><div class="col">Wed</div><div class="col">Thu</div><div class="col">Fri</div><div class="col">Sat</div>
             </div>
             <div class="calendar-grid">
@@ -135,14 +103,18 @@ if ($endWeekday !== 6) {
                             <span class="day-number <?= $isCurrentMonth ? '' : 'text-muted' ?>"><?= $current->format('d') ?></span>
                             <?php if ($isHoliday): ?><span class="badge bg-danger">Holiday</span><?php endif; ?>
                         </div>
-                        <?php if ($isHoliday): ?>
-                            <div class="text-danger fw-semibold attendance-label">Holiday</div>
-                        <?php elseif ($hasAttendance): ?>
-                            <div class="text-success fw-semibold attendance-label">Present</div>
-                            <div class="text-success small"><?= date('h:i A', strtotime($attendanceMap[$dayKey]['time'])) ?></div>
+                        <?php if ($hasAttendance): ?>
+                            <?php $attendanceEntry = $attendanceMap[$dayKey]; require __DIR__ . '/app/views/attendance-location.php'; ?>
+                            <?php if ($dayKey === date('Y-m-d') && $attendanceEntry['logoff'] === null): ?>
+                                <button type="button" id="markAttendanceBtn" data-action="logoff" class="btn btn-sm btn-outline-danger mt-2" <?= !isAttendanceLogoffOpenNow() ? 'disabled' : '' ?> title="<?= e(getAttendanceLogoffWindowMessage()) ?>">
+                                    <span class="spinner-border spinner-border-sm me-1 d-none" aria-hidden="true"></span><span class="btn-text">Logoff</span>
+                                </button>
+                            <?php endif; ?>
                             <?php if (isAdminUser()): ?>
                                 <div class="mt-2 text-end"><button class="btn btn-sm btn-outline-danger delete-attendance-btn" data-id="<?= (int) $attendanceMap[$dayKey]['id'] ?>">Delete</button></div>
                             <?php endif; ?>
+                        <?php elseif ($isHoliday): ?>
+                            <div class="text-danger fw-semibold attendance-label">Holiday</div>
                         <?php elseif ($isFuture): ?>
                             <div class="text-muted attendance-label">Upcoming</div>
                         <?php else: ?>
@@ -152,12 +124,12 @@ if ($endWeekday !== 6) {
                 </div>
                 <?php $current = $current->modify('+1 day'); endwhile; ?>
             </div>
+    </div>
         </div>
     </div>
-</div>
-</body>
-</html>
+</main>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<?php require __DIR__ . '/app/views/attendance-action-script.php'; ?>
 <script>
     $(document).on('click', '.delete-attendance-btn', function () {
         if (!confirm('Delete this attendance record? This action cannot be undone.')) return;
@@ -170,8 +142,9 @@ if ($endWeekday !== 6) {
                 // remove present class and update text
                 const dayCell = btn.closest('.calendar-day');
                 dayCell.removeClass('present');
-                dayCell.find('.attendance-label').removeClass('text-success').addClass('text-muted').text('No attendance');
-                dayCell.find('.text-success.small').remove();
+                dayCell.find('.attendance-event').remove();
+                dayCell.find('#markAttendanceBtn').remove();
+                dayCell.append('<div class="text-muted attendance-label">No attendance</div>');
                 btn.remove();
                 // decrement present count on page
                 const countEl = $('#presentCountMonth');
@@ -188,3 +161,5 @@ if ($endWeekday !== 6) {
         });
     });
 </script>
+</body>
+</html>

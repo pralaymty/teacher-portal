@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $db->execute(
-        'UPDATE user SET dob = ?, designation = ?, academic_qualification = ?, date_of_joining = ?, subject = ?, email = ?, mobile = ? WHERE id = ?',
+        'UPDATE user SET dob = ?, designation = ?, academic_qualification = ?, date_of_joining = ?, subject = ?, email = ?, phone = ? WHERE id = ?',
         [$dob, $designation, $qualification, $dateOfJoining, $subject, $emailId, $mobile, $userId]
     );
 
@@ -44,11 +44,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile | Teachers Employee Portal</title>
+    <title>My Profile | NNV-Teachers Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-<div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+<main id="portal-content" class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1">My Profile</h2>
@@ -70,12 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="col-md-6"><label class="form-label">Date of Joining</label><input type="date" class="form-control" name="date_of_joining" value="<?= e((string) ($user['date_of_joining'] ?? '')) ?>" required></div>
                     <div class="col-md-6"><label class="form-label">Subject</label><input type="text" class="form-control" name="subject" value="<?= e((string) ($user['subject'] ?? '')) ?>" required></div>
                     <div class="col-md-6"><label class="form-label">Email ID</label><input type="email" class="form-control" name="email_id" value="<?= e((string) ($user['email'] ?? '')) ?>" required></div>
-                    <div class="col-md-12"><label class="form-label">Mobile Number</label><input type="tel" class="form-control" name="mobile_number" value="<?= e((string) ($user['mobile'] ?? '')) ?>" required></div>
+                    <div class="col-md-12"><label class="form-label">Mobile Number</label><input type="tel" class="form-control" name="mobile_number" value="<?= e((string) ($user['phone'] ?? '')) ?>" required></div>
                 </div>
                 <div class="mt-4 text-end"><button type="submit" class="btn btn-primary">Save Profile</button></div>
             </form>
         </div>
     </div>
-</div>
+</main>
 </body>
 </html>

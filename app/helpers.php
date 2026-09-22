@@ -145,6 +145,98 @@ function setSetting(string $key, $value, string $group = 'general'): void
     );
 }
 
+function normalizeTimeValue(string $value, string $default): string
+{
+    $value = trim($value);
+    $time = DateTime::createFromFormat('H:i', $value);
+    $errors = DateTime::getLastErrors();
+    if ($time instanceof DateTime && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
+        return $time->format('H:i');
+    }
+
+    $time = DateTime::createFromFormat('H:i:s', $value);
+    $errors = DateTime::getLastErrors();
+    if ($time instanceof DateTime && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
+        return $time->format('H:i');
+    }
+
+    return $default;
+}
+
+function getAttendanceTimeRanges(?int $userType = null): array
+{
+    $userType = $userType ?? (int) ($_SESSION['user_type'] ?? 0);
+    $storedRanges = json_decode((string) getSetting('attendance_user_type_' . $userType, 'attendance', ''), true);
+    if (is_array($storedRanges)) {
+        $ranges = [];
+        foreach (['entry_start', 'entry_end', 'exit_start', 'exit_end'] as $field) {
+            $ranges[$field] = is_string($storedRanges[$field] ?? null)
+                ? normalizeTimeValue($storedRanges[$field], '') : '';
+        }
+        if (!in_array('', $ranges, true)
+            && $ranges['entry_start'] <= $ranges['entry_end']
+            && $ranges['exit_start'] <= $ranges['exit_end']) {
+            return $ranges;
+        }
+    }
+
+    // Preserve the existing schedule until this user type has its own settings.
+    return [
+        'entry_start' => normalizeTimeValue((string) getSetting('attendance_entry_start_time', 'attendance', '10:30'), '10:30'),
+        'entry_end' => normalizeTimeValue((string) getSetting('attendance_entry_end_time', 'attendance', '11:00'), '11:00'),
+        'exit_start' => normalizeTimeValue((string) getSetting('attendance_exit_start_time', 'attendance', '16:00'), '16:00'),
+        'exit_end' => normalizeTimeValue((string) getSetting('attendance_exit_end_time', 'attendance', '16:30'), '16:30'),
+    ];
+}
+
+function isTimeWithinRange(string $time, string $start, string $end): bool
+{
+    return $time >= $start && $time <= $end;
+}
+
+function isAttendanceOpenNow(?DateTimeInterface $now = null): bool
+{
+    if (isSuperAdminUser()) {
+        return true;
+    }
+
+    $ranges = getAttendanceTimeRanges();
+    $currentTime = ($now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->format('H:i');
+
+    return isTimeWithinRange($currentTime, $ranges['entry_start'], $ranges['entry_end'])
+        || isTimeWithinRange($currentTime, $ranges['exit_start'], $ranges['exit_end']);
+}
+
+function getAttendanceWindowMessage(): string
+{
+    if (isSuperAdminUser()) {
+        return 'The super admin can mark attendance at any time.';
+    }
+
+    $ranges = getAttendanceTimeRanges();
+
+    return 'Attendance can be marked only between '
+        . formatTime($ranges['entry_start']) . ' - ' . formatTime($ranges['entry_end'])
+        . ' or '
+        . formatTime($ranges['exit_start']) . ' - ' . formatTime($ranges['exit_end']) . '.';
+}
+
+function isAttendanceLogoffOpenNow(?DateTimeInterface $now = null): bool
+{
+    if (isSuperAdminUser()) {
+        return true;
+    }
+    $ranges = getAttendanceTimeRanges();
+    $time = ($now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Kolkata')))->format('H:i');
+    return isTimeWithinRange($time, $ranges['exit_start'], $ranges['exit_end']);
+}
+
+function getAttendanceLogoffWindowMessage(): string
+{
+    $ranges = getAttendanceTimeRanges();
+    return 'Logoff is available between ' . formatTime($ranges['exit_start']) . ' and ' . formatTime($ranges['exit_end']) . '.';
+}
+
 function formatDate(string $date): string
 {
     if ($date === '' || $date === '0000-00-00') {
@@ -190,13 +282,13 @@ function isValidEmail(string $value): bool
 function isValidLatitude(string $value): bool
 {
     $lat = (float) $value;
-    return $value !== '' && $lat >= -90 && $lat <= 90;
+    return is_numeric($value) && is_finite($lat) && $lat >= -90 && $lat <= 90;
 }
 
 function isValidLongitude(string $value): bool
 {
     $lng = (float) $value;
-    return $value !== '' && $lng >= -180 && $lng <= 180;
+    return is_numeric($value) && is_finite($lng) && $lng >= -180 && $lng <= 180;
 }
 
 function ensurePortalSchema(): void
@@ -231,4 +323,6 @@ function ensurePortalSchema(): void
             }
         }
     }
+    LeaveSettingsMigration::run($db);
+    AttendanceLogoffMigration::run($db);
 }

@@ -37,6 +37,10 @@ Default configuration:
 - Password: empty
 
 ## Existing database dependency
+For live-server updates, select the existing portal database in phpMyAdmin and import **`database/all_updates.sql` only**. It includes all portal tables, the M/F gender upgrade, missing attendance coordinate columns, independent leave records per user type, historical leave references, and default settings. Existing `user` and `user_type` tables are required. Upload the updated PHP files along with this database upgrade.
+
+The first gender upgrade initializes existing users to `M`. Re-imports preserve later M/F changes, saved role quotas, attendance windows, school location, and selected user types. School coordinates are configured through Settings, not supplied by the SQL file. The import uses a temporary stored procedure, so the importing database account needs CREATE ROUTINE and ALTER privileges. The older `user_gender_migration.sql` is included in this consolidated upgrade and does not need to be imported separately.
+
 This portal reuses the existing `nnv_admin` database and the current `user` table. The application uses the existing `user_type` values:
 - `1` = Master Admin
 - `3` = Teacher
@@ -61,10 +65,22 @@ The new portal creates only the minimum required tables in `database/teacher_por
 - Geo-location is collected only when marking attendance.
 - Attendance is saved with date, time, latitude, longitude, and timestamps.
 - Duplicate entries for the same user and date are blocked.
+- After today's attendance is marked, a Logoff button appears on the dashboard and the user's current calendar entry. Logoff stores a separate time and browser coordinates on that day's record, appears beside Login in both calendars, and does not sign the user out of the portal. Only one logoff is allowed per day, after login, within the role's exit window and school radius (super admin is exempt from time/distance restrictions).
+- School Location settings define latitude, longitude, and an allowed distance in metres. Both attendance calendars calculate distance from saved coordinates using the current settings: green within range, bold red outside range, and grey when location data or school settings are missing. Time and distance are shown together, including attendance on holidays.
+- Users other than the super admin can mark attendance only within their role's time windows AND the school's allowed distance. Missing school configuration blocks their attendance until configured. The super admin is exempt from distance and time restrictions, but still provides browser coordinates.
+- Manual entries capture the super admin's current browser coordinates, including when the selected attendance date is in the past; these coordinates are not the teacher's historical location. Older entries without coordinates remain location unavailable. Browser location accuracy depends on the device; location is requested only when marking attendance.
+- Attendance Settings lists roles from `user_type` and saves separate entry/exit time windows for each role in `teacher_settings`.
+- Both settings dropdowns initially list roles 3, 4, 5, 10, 11, and 12. Settings > Manage User Types controls this shared list; removing a role from the lists does not delete its users, leave records, or attendance configuration.
+- Roles without a saved schedule use the existing general attendance windows.
+- Master Admin can mark their own attendance at any time and add manual attendance with a selected date/time. Other users must mark within their role's windows.
 
 ## Leave functionality
 - Teachers can apply leave.
 - Leave types are configurable via the database.
+- Leave Settings uses a user-type dropdown. Each leave record belongs to one role: adding, editing, deleting, and restoring affect only that role, including its name, code, gender restriction, and quota.
+- Different roles can use the same leave name/code with different quotas. Deletion disables new applications only for the selected role and preserves historical records.
+- The automatic `LeaveSettingsMigration` adds `teacher_leave_types.user_type_id` and role-scoped unique indexes. It copies old leave records into independent role records and relinks applications/history using each user's current role. Original shared records and old quota settings are retained.
+- Old explicit quota assignments determine which roles keep a leave active. Legacy defaults without explicit assignments are copied to all existing roles; newly added roles start without leave entries.
 - Leave application status includes Approval Pending, Approved, and Rejected.
 - Special approval explanations are limited to 200 characters.
 

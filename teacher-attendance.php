@@ -18,8 +18,12 @@ $startDay = $startOfMonth->format('Y-m-01');
 $endDay = $startOfMonth->format('Y-m-t');
 
 $attendanceMap = [];
-foreach ($db->fetchAll('SELECT id, attendance_date, attendance_time FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?', [$userId, $startDay, $endDay]) as $row) {
-    $attendanceMap[$row['attendance_date']] = ['id' => $row['id'], 'time' => $row['attendance_time']];
+$schoolLocation = SchoolLocationService::settings();
+foreach ($db->fetchAll('SELECT id, attendance_date, attendance_time, latitude, longitude, logoff_time, logoff_latitude, logoff_longitude FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?', [$userId, $startDay, $endDay]) as $row) {
+    $attendanceMap[$row['attendance_date']] = ['id' => $row['id'], 'time' => $row['attendance_time'],
+        'location' => SchoolLocationService::assess($row['latitude'], $row['longitude'], $schoolLocation),
+        'logoff' => $row['logoff_time'] === null ? null : ['time' => $row['logoff_time'],
+            'location' => SchoolLocationService::assess($row['logoff_latitude'], $row['logoff_longitude'], $schoolLocation)]];
 }
 
 $monthLabel = $monthDate->format('F Y');
@@ -56,49 +60,11 @@ foreach ($holidayRows as $holiday) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teacher Attendance | Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        /* Calendar styling to match attendance view */
-        .calendar-day {
-            min-height: 110px;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            background: #ffffff;
-            box-shadow: 0 1px 3px rgba(16,24,40,0.04);
-            transition: transform .08s ease, box-shadow .08s ease;
-            padding: 12px;
-        }
-        .calendar-day:hover { transform: translateY(-4px); box-shadow: 0 6px 20px rgba(16,24,40,0.08); }
-        .calendar-day.future { opacity: 0.5; }
-        .calendar-day.present { background: #ecfff2; border-color: #a3e0b2; }
-        .calendar-day.sunday { background: linear-gradient(180deg,#fff6f6,#fff); border-color: #f5c6cb; }
-        .calendar-day.holiday { background: #fff3f3; border-color: #f8c7c7; position:relative; }
-        .calendar-day.holiday .day-number { background:#c82333; color:#fff; }
-        .holiday-icon { position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; background:#dc3545; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; }
-        .day-number { font-weight: 700; display:inline-block; padding:6px 10px; border-radius:6px; }
-        .calendar-day.sunday .day-number { background:#dc3545; color:#fff; }
-        .weekday-headers { gap: .5rem; }
-        .weekday-headers .col { padding: .35rem .5rem; border-radius: 6px; }
-        .weekday-headers .col:first-child { color: #dc3545; font-weight:700; }
-        /* Calendar grid: responsive columns */
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.6rem; }
-        .day-item { }
-        @media (max-width: 992px) {
-            .calendar-grid { grid-template-columns: repeat(5, 1fr); }
-            .calendar-day { min-height: 100px; }
-        }
-        @media (max-width: 768px) {
-            .calendar-grid { grid-template-columns: repeat(3, 1fr); }
-            .calendar-day { min-height: 90px; }
-        }
-        @media (max-width: 576px) {
-            .calendar-grid { grid-template-columns: repeat(2, 1fr); }
-            .calendar-day { min-height: 80px; }
-        }
-    </style>
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-<div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+<main id="portal-content" class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1">Attendance for <?= e(getUserFullName($user)) ?></h2>
@@ -119,16 +85,21 @@ foreach ($holidayRows as $holiday) {
             <div class="fw-semibold"><?= e($monthLabel) ?></div>
         </div>
 
-        <form id="addAttendanceForm" class="row g-2">
-            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token'] ?? '') ?>">
-            <input type="hidden" name="user_id" value="<?= $userId ?>">
-            <div class="col-md-3"><input type="date" class="form-control" name="date" required></div>
-            <div class="col-md-3"><input type="time" class="form-control" name="time" value="<?= date('H:i') ?>" required></div>
-            <div class="col-md-3"><button class="btn btn-primary" id="addAttendanceBtn">Add Attendance</button></div>
-        </form>
+        <?php if (isSuperAdminUser()): ?>
+            <form id="addAttendanceForm" class="row g-2">
+                <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token'] ?? '') ?>">
+                <input type="hidden" name="user_id" value="<?= $userId ?>">
+                <div class="col-md-3"><input type="date" class="form-control" name="date" required></div>
+                <div class="col-md-3"><input type="time" class="form-control" name="time" value="<?= date('H:i') ?>" required></div>
+                <div class="col-md-3"><button class="btn btn-primary" id="addAttendanceBtn">Add Attendance</button></div>
+            </form>
+        <?php else: ?>
+            <div class="alert alert-info mb-0">Only the super admin can add attendance manually.</div>
+        <?php endif; ?>
     </div>
 
-    <div class="row text-center text-uppercase small text-muted mb-2 weekday-headers">
+    <div class="calendar-scroll" tabindex="0" role="region" aria-label="Attendance calendar">
+<div class="row text-center text-uppercase small text-muted mb-2 weekday-headers">
         <div class="col">Sun</div><div class="col">Mon</div><div class="col">Tue</div><div class="col">Wed</div><div class="col">Thu</div><div class="col">Fri</div><div class="col">Sat</div>
     </div>
     <div class="calendar-grid">
@@ -149,8 +120,12 @@ foreach ($holidayRows as $holiday) {
                     <span class="day-number <?= $isCurrentMonth ? '' : 'text-muted' ?>"><?= $current->format('d') ?></span>
                 </div>
                 <?php if ($hasAttendance): ?>
-                    <div class="text-success fw-semibold attendance-label">Present</div>
-                    <div class="text-success small"><?= date('h:i A', strtotime($attendanceMap[$dayKey]['time'])) ?></div>
+                    <?php $attendanceEntry = $attendanceMap[$dayKey]; require __DIR__ . '/app/views/attendance-location.php'; ?>
+                    <?php if ($userId === (int) $_SESSION['user_id'] && $dayKey === date('Y-m-d') && $attendanceEntry['logoff'] === null): ?>
+                        <button type="button" id="markAttendanceBtn" data-action="logoff" class="btn btn-sm btn-outline-danger mt-2" <?= !isAttendanceLogoffOpenNow() ? 'disabled' : '' ?> title="<?= e(getAttendanceLogoffWindowMessage()) ?>">
+                            <span class="spinner-border spinner-border-sm me-1 d-none" aria-hidden="true"></span><span class="btn-text">Logoff</span>
+                        </button>
+                    <?php endif; ?>
                     <div class="mt-2 text-end"><button class="btn btn-sm btn-outline-danger delete-attendance-btn" data-id="<?= (int) $attendanceMap[$dayKey]['id'] ?>">Delete</button></div>
                 <?php else: ?>
                     <div class="text-muted attendance-label">No attendance</div>
@@ -159,8 +134,10 @@ foreach ($holidayRows as $holiday) {
         </div>
         <?php $current = $current->modify('+1 day'); endwhile; ?>
     </div>
-</div>
+    </div>
+</main>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<?php require __DIR__ . '/app/views/attendance-action-script.php'; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Modal for messages -->
 <div class="modal fade" id="messageModal" tabindex="-1" aria-hidden="true">
@@ -187,47 +164,50 @@ foreach ($holidayRows as $holiday) {
     $('#addAttendanceForm').on('submit', function (e) {
         e.preventDefault();
         const btn = $('#addAttendanceBtn');
-        btn.prop('disabled', true).text('Adding...');
-        $.ajax({
-            url: 'attendance-add.php',
-            method: 'POST',
-            data: $(this).serialize(),
-            dataType: 'json'
-        }).done(function (resp) {
-            if (resp && resp.success) {
-                showMessage(resp.message);
-                // attempt in-place update if the date is visible
-                const formDate = $('[name=date]').val();
-                const formTime = $('[name=time]').val();
-                const cell = $('.calendar-day[data-date="' + formDate + '"]');
-                if (cell.length) {
-                    cell.addClass('present');
-                    cell.find('.attendance-label').removeClass('text-muted').addClass('text-success').text('Present');
-                    if (cell.find('.text-success.small').length) {
-                        cell.find('.text-success.small').text(new Date('1970-01-01T' + formTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-                    } else {
-                        cell.append('<div class="text-success small">' + new Date('1970-01-01T' + formTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + '</div>');
-                    }
-                    // add delete button
-                    if (!cell.find('.delete-attendance-btn').length) {
-                        cell.append('<div class="mt-2 text-end"><button class="btn btn-sm btn-outline-danger delete-attendance-btn" data-id="">Delete</button></div>');
-                    }
-                }
-                // clear form
-                btn.prop('disabled', false).text('Add Attendance');
-            } else {
-                showMessage((resp && resp.message) ? resp.message : 'Failed to add attendance');
-                btn.prop('disabled', false).text('Add Attendance');
-            }
-        }).fail(function (jqXHR) {
-            let msg = 'Request failed';
-            try {
-                const parsed = jqXHR.responseJSON || JSON.parse(jqXHR.responseText || '{}');
-                if (parsed && parsed.message) msg = parsed.message;
-            } catch (e) {}
-            showMessage(msg);
+        if (btn.prop('disabled')) return;
+        const data = $(this).serializeArray();
+        const selectedDate = data.find(field => field.name === 'date').value;
+        const locationError = function (message) {
+            showMessage(message);
             btn.prop('disabled', false).text('Add Attendance');
-        });
+        };
+        if (!navigator.geolocation) {
+            locationError('Geolocation is not supported by this browser.');
+            return;
+        }
+        btn.prop('disabled', true).text('Getting location...');
+        navigator.geolocation.getCurrentPosition(function (position) {
+            data.push({ name: 'latitude', value: position.coords.latitude });
+            data.push({ name: 'longitude', value: position.coords.longitude });
+            btn.text('Adding...');
+            $.ajax({
+                url: 'attendance-add.php',
+                method: 'POST',
+                data: data,
+                dataType: 'json'
+            }).done(function (resp) {
+                if (resp && resp.success) {
+                    const calendarUrl = new URL(window.location.href);
+                    calendarUrl.searchParams.set('month', selectedDate.slice(0, 7));
+                    window.location.href = calendarUrl.toString();
+                } else {
+                    locationError((resp && resp.message) ? resp.message : 'Failed to add attendance');
+                }
+            }).fail(function (jqXHR) {
+                let msg = 'Request failed';
+                try {
+                    const parsed = jqXHR.responseJSON || JSON.parse(jqXHR.responseText || '{}');
+                    if (parsed && parsed.message) msg = parsed.message;
+                } catch (e) {}
+                locationError(msg);
+            });
+        }, function (error) {
+            let message = 'Your current location is required to add attendance.';
+            if (error && error.code === 1) message = 'Location permission denied. Please allow location access to add attendance.';
+            if (error && error.code === 2) message = 'Location information is unavailable. Please try again.';
+            if (error && error.code === 3) message = 'Location request timed out. Please try again.';
+            locationError(message);
+        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
     });
 
     $(document).on('click', '.delete-attendance-btn', function () {
@@ -244,8 +224,9 @@ foreach ($holidayRows as $holiday) {
                 showMessage(resp.message);
                 const cell = btn.closest('.calendar-day');
                 cell.removeClass('present');
-                cell.find('.attendance-label').removeClass('text-success').addClass('text-muted').text('No attendance');
-                cell.find('.text-success.small').remove();
+                cell.find('.attendance-event').remove();
+                cell.find('#markAttendanceBtn').remove();
+                cell.append('<div class="text-muted attendance-label">No attendance</div>');
                 btn.remove();
                 const pc = $('#presentCountMonth');
                 const current = parseInt(pc.text() || '0', 10) || 0;

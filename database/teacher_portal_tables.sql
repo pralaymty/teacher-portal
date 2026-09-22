@@ -1,3 +1,5 @@
+-- Base schema used by portal bootstrap.
+-- For all live-server updates, import database/all_updates.sql instead.
 CREATE TABLE IF NOT EXISTS `user` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `fname` VARCHAR(100) NOT NULL,
@@ -6,7 +8,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   `password` VARCHAR(255) NOT NULL,
   `user_type` INT NOT NULL DEFAULT 3,
   `status` TINYINT(1) NOT NULL DEFAULT 1,
-  `gender` ENUM('Male','Female','Other') NULL,
+  `gender` ENUM('M','F') NOT NULL DEFAULT 'M',
   `last_login_at` DATETIME NULL,
   `last_login_ip` VARCHAR(45) NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -27,6 +29,9 @@ CREATE TABLE IF NOT EXISTS `teacher_attendance` (
   `attendance_time` TIME NOT NULL,
   `latitude` DECIMAL(10,8) NULL,
   `longitude` DECIMAL(11,8) NULL,
+  `logoff_time` TIME NULL,
+  `logoff_latitude` DECIMAL(10,8) NULL,
+  `logoff_longitude` DECIMAL(11,8) NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -37,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `teacher_attendance` (
 
 CREATE TABLE IF NOT EXISTS `teacher_leave_types` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_type_id` INT NULL,
   `name` VARCHAR(100) NOT NULL,
   `code` VARCHAR(30) NOT NULL,
   `quota` DECIMAL(5,2) NOT NULL DEFAULT 0.00,
@@ -45,8 +51,8 @@ CREATE TABLE IF NOT EXISTS `teacher_leave_types` (
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_leave_type_code` (`code`),
-  UNIQUE KEY `uq_leave_type_name` (`name`)
+  UNIQUE KEY `uq_leave_type_role_code` (`user_type_id`, `code`),
+  UNIQUE KEY `uq_leave_type_role_name` (`user_type_id`, `name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `teacher_leave_applications` (
@@ -107,16 +113,21 @@ CREATE TABLE IF NOT EXISTS `teacher_settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `teacher_leave_types` (`name`, `code`, `quota`, `gender_restriction`, `is_active`)
-VALUES
-  ('CL', 'CL', 12.00, 'All', 1),
-  ('PL', 'PL', 15.00, 'All', 1),
-  ('SL', 'SL', 10.00, 'All', 1),
-  ('Maternity Leave', 'Maternity', 0.00, 'Female', 1),
-  ('Other Leave', 'Other', 5.00, 'All', 1)
-ON DUPLICATE KEY UPDATE `quota` = VALUES(`quota`), `gender_restriction` = VALUES(`gender_restriction`), `is_active` = VALUES(`is_active`);
+SELECT defaults.name, defaults.code, defaults.quota, defaults.gender_restriction, 1
+FROM (
+  SELECT 'CL' AS name, 'CL' AS code, 12.00 AS quota, 'All' AS gender_restriction
+  UNION ALL SELECT 'PL', 'PL', 15.00, 'All'
+  UNION ALL SELECT 'SL', 'SL', 10.00, 'All'
+  UNION ALL SELECT 'Maternity Leave', 'Maternity', 0.00, 'Female'
+  UNION ALL SELECT 'Other Leave', 'Other', 5.00, 'All'
+) AS defaults
+WHERE NOT EXISTS (SELECT 1 FROM teacher_leave_types existing WHERE existing.name = defaults.name OR existing.code = defaults.code);
 
 INSERT INTO `teacher_settings` (`setting_key`, `setting_value`, `setting_group`, `description`)
 VALUES
-  ('attendance_entry_time', '09:30', 'attendance', 'Official attendance entry time'),
+  ('attendance_entry_start_time', '10:30', 'attendance', 'Official attendance entry start time'),
+  ('attendance_entry_end_time', '11:00', 'attendance', 'Official attendance entry end time'),
+  ('attendance_exit_start_time', '16:00', 'attendance', 'Official attendance exit start time'),
+  ('attendance_exit_end_time', '16:30', 'attendance', 'Official attendance exit end time'),
   ('email_notifications_enabled', '1', 'email', 'Enable email notifications')
 ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`), `description` = VALUES(`description`);

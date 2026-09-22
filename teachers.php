@@ -5,6 +5,7 @@ requireAdmin();
 $db = new DatabaseService();
 $teacherType = (int) (appConfig()['auth']['teacher_user_type'] ?? 3);
 $teachers = $db->fetchAll('SELECT id, fname, lname, email FROM user WHERE user_type = ? ORDER BY lname, fname', [$teacherType]);
+$quota = array_sum(array_column((new LeaveSettingsService($db))->getTypes($teacherType), 'quota'));
 
 ?>
 <!DOCTYPE html>
@@ -14,9 +15,11 @@ $teachers = $db->fetchAll('SELECT id, fname, lname, email FROM user WHERE user_t
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teachers | Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <?php require __DIR__ . '/app/views/portal-head.php'; ?>
 </head>
 <body>
-<div class="container py-4">
+<?php require __DIR__ . '/app/views/portal-header.php'; ?>
+<main id="portal-content" class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1">Teachers</h2>
@@ -33,8 +36,6 @@ $teachers = $db->fetchAll('SELECT id, fname, lname, email FROM user WHERE user_t
                     $id = (int) $t['id'];
                     $present = (int) ($db->fetchOne('SELECT COUNT(*) AS total FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?', [$id, date('Y-m-01'), date('Y-m-t')])['total'] ?? 0);
                     $leaveTaken = (float) ($db->fetchOne('SELECT COALESCE(SUM(days_count),0) AS total FROM teacher_leave_applications WHERE user_id = ? AND status = ?', [$id, 'Approved'])['total'] ?? 0);
-                    // compute total quota from active leave types
-                    $quota = (float) ($db->fetchOne('SELECT COALESCE(SUM(quota),0) AS total FROM teacher_leave_types WHERE is_active = 1')['total'] ?? 0);
                     $balance = max(0, $quota - $leaveTaken);
                 ?>
                     <tr>
@@ -52,6 +53,6 @@ $teachers = $db->fetchAll('SELECT id, fname, lname, email FROM user WHERE user_t
             </tbody>
         </table>
     </div>
-</div>
+</main>
 </body>
 </html>
