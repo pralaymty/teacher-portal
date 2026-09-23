@@ -26,7 +26,7 @@ $presentThisMonth = (int) $db->fetchOne(
     [$userId, date('Y-m-01'), date('Y-m-t')]
 )['total'];
 
-$leaveQuota = (new LeaveSettingsService($db))->getTypes($userType);
+$leaveQuota = (new LeaveSettingsService($db))->getEligibleTypes($userType, (string) ($user['gender'] ?? ''));
 $leaveUsed = 0.0;
 $leavePending = 0.0;
 $leaveApproved = 0.0;

@@ -21,6 +21,17 @@ class LeaveSettingsService
         );
     }
 
+    /** Return active leave entries matching the user's role and gender. */
+    public function getEligibleTypes(int $userType, string $gender): array
+    {
+        $gender = strtoupper(trim($gender));
+        $gender = ['M' => 'MALE', 'F' => 'FEMALE'][$gender] ?? $gender;
+
+        return array_filter($this->getTypes($userType), static function (array $type) use ($gender): bool {
+            return in_array(strtoupper(trim($type['gender_restriction'])), ['ALL', $gender], true);
+        });
+    }
+
     /** Add, edit, or restore a leave entry within one user type. */
     public function save(int $id, int $userType, array $input): void
     {

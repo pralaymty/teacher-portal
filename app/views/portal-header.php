@@ -24,6 +24,10 @@ $portalActive = ['teacher-attendance.php' => 'teachers.php', 'leave-history.php'
             <span>NNV-Teachers Portal<small>Namkhana Narayan Vidyamandir</small></span>
         </a>
         <div class="portal-utilities">
+            <a class="portal-user" href="profile.php">
+                <i class="bi bi-person-circle" aria-hidden="true"></i>
+                <span><small>Signed in as</small><strong><?= e((string) ($_SESSION['user_name'] ?? 'User')) ?></strong></span>
+            </a>
             <span class="portal-date"><i class="bi bi-calendar3" aria-hidden="true"></i> <?= date('d M Y') ?></span>
             <a href="logout.php" class="btn btn-sm btn-outline-secondary" title="Sign out of the portal"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign out</span></a>
         </div>

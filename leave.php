@@ -4,11 +4,23 @@ requireTeacher();
 
 $db = new DatabaseService();
 $userId = (int) $_SESSION['user_id'];
+$currentUser = $db->fetchOne(
+    'SELECT id, user_type, gender FROM user WHERE id = ?',
+    [$userId]
+);
+if (!$currentUser) {
+    http_response_code(404);
+    exit('User not found.');
+}
 $applications = $db->fetchAll(
     'SELECT l.*, t.name AS leave_type FROM teacher_leave_applications l LEFT JOIN teacher_leave_types t ON t.id = l.leave_type_id WHERE l.user_id = ? ORDER BY l.created_at DESC',
     [$userId]
 );
-$leaveTypes = (new LeaveSettingsService($db))->getTypes((int) $_SESSION['user_type']);
+$leaveTypes = (new LeaveSettingsService($db))->getEligibleTypes(
+    (int) $_SESSION['user_type'],
+    (string) ($currentUser['gender'] ?? '')
+);
+$formatLeaveDays = static fn ($days): string => rtrim(rtrim(number_format((float) $days, 1), '0'), '.');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'] ?? '')) {
@@ -39,13 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('leave.php');
     }
 
-    $gender = (string) ($db->fetchOne('SELECT gender FROM user WHERE id = ? LIMIT 1', [$userId])['gender'] ?? '');
-    $gender = ['M' => 'Male', 'F' => 'Female'][strtoupper(trim($gender))] ?? $gender;
-    if ($leaveType['gender_restriction'] !== 'All' && strcasecmp($gender, $leaveType['gender_restriction']) !== 0) {
-        $_SESSION['flash'] = ['type' => 'danger', 'message' => 'You are not eligible for this leave type based on its gender restriction.'];
-        redirect('leave.php');
-    }
-
     $days = (new DateTime($endDate))->diff(new DateTime($startDate))->days + 1;
     if ($days <= 0) {
         $_SESSION['flash'] = ['type' => 'danger', 'message' => 'End date must be after start date.'];
@@ -68,14 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $leaveOverview = null;
 if ((int) $_SESSION['user_type'] !== 1) {
-    $currentUser = $db->fetchOne(
-        'SELECT id, user_type, gender FROM user WHERE id = ?',
-        [$userId]
-    );
-    if (!$currentUser) {
-        http_response_code(404);
-        exit('User not found.');
-    }
     $overviewTypes = $db->fetchAll(
         'SELECT id, name, user_type_id, quota, gender_restriction, is_active FROM teacher_leave_types ORDER BY name, id'
     );
@@ -108,37 +105,38 @@ if ((int) $_SESSION['user_type'] !== 1) {
     <?php if ($leaveOverview !== null): ?>
         <section class="mb-4" aria-labelledby="leave-overview-heading">
             <h3 id="leave-overview-heading" class="h5 mb-3">My Leave Overview <small class="text-muted fw-normal">(All time, days)</small></h3>
-            <div class="row g-3 mb-4">
+            <div class="leave-overview-totals mb-3">
                 <?php foreach (['quota' => 'Current Quota', 'taken' => 'Taken (Approved)', 'pending' => 'Pending', 'remaining' => 'Remaining'] as $key => $label): ?>
-                    <div class="col-md-3">
-                        <div class="card h-100"><div class="card-body">
+                    <div>
                             <div class="text-muted small"><?= e($label) ?></div>
-                            <div class="fs-4 fw-bold mt-2"><?= number_format($leaveOverview['totals'][$key], 2) ?></div>
-                        </div></div>
+                            <div class="fs-4 fw-bold"><?= $formatLeaveDays($leaveOverview['totals'][$key]) ?></div>
                     </div>
                 <?php endforeach; ?>
             </div>
             <?php if (!$leaveOverview['balances']): ?>
                 <p class="text-muted">No leave quota assigned.</p>
             <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead><tr>
-                            <th scope="col">Leave Type</th><th scope="col">Quota</th>
-                            <th scope="col">Taken (Approved)</th><th scope="col">Pending</th><th scope="col">Remaining</th>
-                        </tr></thead>
-                        <tbody>
-                            <?php foreach ($leaveOverview['balances'] as $balance): ?>
-                                <tr>
-                                    <td><?= e($balance['name']) ?><?php if ($balance['historical']): ?> <span class="badge bg-secondary">Historical</span><?php endif; ?></td>
-                                    <?php foreach (array_keys($leaveOverview['totals']) as $key): ?>
-                                        <td class="<?= $key === 'remaining' ? 'fw-bold' : '' ?>"><?= number_format($balance[$key], 2) ?></td>
-                                    <?php endforeach; ?>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                <div class="leave-overview-grid">
+                    <?php foreach (array_values($leaveOverview['balances']) as $index => $balance): ?>
+                        <article class="leave-balance-card" style="--leave-hue: <?= (int) round(fmod(165 + $index * 137.508, 360)) ?>">
+                            <div class="leave-balance-heading">
+                                <h4><?= e($balance['name']) ?></h4>
+                                <?php if ($balance['historical']): ?><span class="badge bg-secondary">Historical</span><?php endif; ?>
+                            </div>
+                            <div class="leave-balance-label">Balance / Total allotted</div>
+                            <div class="leave-balance-value">
+                                <strong><?= $formatLeaveDays($balance['remaining']) ?></strong>
+                                <span>/ <?= $formatLeaveDays($balance['quota']) ?> <small>days</small></span>
+                            </div>
+                            <div class="leave-balance-pending">
+                                <span><i class="bi bi-clock" aria-hidden="true"></i> Pending approval</span>
+                                <strong><?= $formatLeaveDays($balance['pending']) ?> days</strong>
+                            </div>
+                            <div class="leave-balance-taken">Taken (approved): <strong><?= $formatLeaveDays($balance['taken']) ?> days</strong></div>
+                        </article>
+                    <?php endforeach; ?>
                 </div>
+                <p class="text-muted small mt-2 mb-0">Pending requests are not deducted from your balance. Historical leave has no current allotment.</p>
             <?php endif; ?>
         </section>
     <?php endif; ?>
@@ -156,7 +154,7 @@ if ((int) $_SESSION['user_type'] !== 1) {
                                 <select class="form-select" name="leave_type_id" required>
                                     <option value="">Select leave type</option>
                                     <?php foreach ($leaveTypes as $type): ?>
-                                        <option value="<?= (int) $type['id'] ?>"><?= e($type['name']) ?> (Quota: <?= e((string) $type['quota']) ?> days)</option>
+                                        <option value="<?= (int) $type['id'] ?>"><?= e($type['name']) ?> (Quota: <?= $formatLeaveDays($type['quota']) ?> days)</option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -189,7 +187,7 @@ if ((int) $_SESSION['user_type'] !== 1) {
                                     <td><?= e($app['leave_type'] ?? 'N/A') ?></td>
                                     <td><?= e($app['start_date']) ?></td>
                                     <td><?= e($app['end_date']) ?></td>
-                                    <td><?= (float) $app['days_count'] ?></td>
+                                    <td><?= $formatLeaveDays($app['days_count']) ?></td>
                                     <td><span class="badge bg-<?= $app['status'] === 'Approved' ? 'success' : ($app['status'] === 'Rejected' ? 'danger' : 'warning') ?>"><?= e($app['status']) ?></span></td>
                                     <td><?= e($app['reason']) ?></td>
                                 </tr>
