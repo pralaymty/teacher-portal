@@ -3,9 +3,27 @@ require_once __DIR__ . '/app/bootstrap.php';
 requireAdmin();
 
 $db = new DatabaseService();
-$teacherType = (int) (appConfig()['auth']['teacher_user_type'] ?? 3);
-$teachers = $db->fetchAll('SELECT id, fname, lname, email FROM user WHERE user_type = ? ORDER BY lname, fname', [$teacherType]);
-$quota = array_sum(array_column((new LeaveSettingsService($db))->getTypes($teacherType), 'quota'));
+$includedUserTypes = [3, 4, 5, 10, 11, 12];
+$userTypePlaceholders = implode(', ', array_fill(0, count($includedUserTypes), '?'));
+$teachers = $db->fetchAll(
+    "SELECT id, fname, lname, email, user_type, gender FROM user WHERE user_type IN ($userTypePlaceholders) ORDER BY lname, fname",
+    $includedUserTypes
+);
+$leaveTypes = $db->fetchAll(
+    'SELECT id, name, user_type_id, quota, gender_restriction, is_active FROM teacher_leave_types'
+);
+$leaveApplications = $db->fetchAll(
+    "SELECT l.user_id, l.leave_type_id, l.status, SUM(l.days_count) AS days_count
+     FROM teacher_leave_applications l
+     INNER JOIN user u ON u.id = l.user_id
+     WHERE u.user_type IN ($userTypePlaceholders) AND l.status = ?
+     GROUP BY l.user_id, l.leave_type_id, l.status",
+    array_merge($includedUserTypes, ['Approved'])
+);
+$teacherLeaveTotals = [];
+foreach ((new LeaveOverviewService())->summarize($teachers, $leaveTypes, $leaveApplications) as $overview) {
+    $teacherLeaveTotals[(int) $overview['user']['id']] = $overview['totals'];
+}
 
 ?>
 <!DOCTYPE html>
@@ -35,8 +53,8 @@ $quota = array_sum(array_column((new LeaveSettingsService($db))->getTypes($teach
                 <?php foreach ($teachers as $t):
                     $id = (int) $t['id'];
                     $present = (int) ($db->fetchOne('SELECT COUNT(*) AS total FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?', [$id, date('Y-m-01'), date('Y-m-t')])['total'] ?? 0);
-                    $leaveTaken = (float) ($db->fetchOne('SELECT COALESCE(SUM(days_count),0) AS total FROM teacher_leave_applications WHERE user_id = ? AND status = ?', [$id, 'Approved'])['total'] ?? 0);
-                    $balance = max(0, $quota - $leaveTaken);
+                    $leaveTaken = $teacherLeaveTotals[$id]['taken'];
+                    $balance = $teacherLeaveTotals[$id]['remaining'];
                 ?>
                     <tr>
                         <td><?= e(getUserFullName(['fname' => $t['fname'], 'lname' => $t['lname']])) ?></td>
@@ -47,6 +65,7 @@ $quota = array_sum(array_column((new LeaveSettingsService($db))->getTypes($teach
                         <td>
                             <a href="teacher-attendance.php?user_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">View Attendance</a>
                             <a href="leave-history.php?user_id=<?= $id ?>" class="btn btn-sm btn-outline-secondary">View Leave</a>
+                            <a href="leave-export.php?user_id=<?= $id ?>" class="btn btn-sm btn-outline-primary">Download Leave CSV</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>

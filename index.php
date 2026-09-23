@@ -45,21 +45,4 @@ $csrf = csrfToken();
         </div>
     </div>
 </body>
-<script>
-    // Ask for location permission on first visit to the site
-    (function () {
-        try {
-            if (typeof window !== 'undefined' && navigator && navigator.geolocation) {
-                const key = 'tp_loc_permission_asked';
-                if (!localStorage.getItem(key)) {
-                    // trigger permission prompt; we don't need the result here
-                    navigator.geolocation.getCurrentPosition(function () {}, function () {}, { timeout: 5000 });
-                    localStorage.setItem(key, '1');
-                }
-            }
-        } catch (e) {
-            // ignore
-        }
-    })();
-</script>
 </html>

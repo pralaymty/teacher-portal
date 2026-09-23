@@ -47,4 +47,11 @@ check($overview[3]['totals']['quota'] === 0.0, 'Unconfigured role has no quota')
 $personal = $service->summarize([$users[0]], $types, $applications);
 check(count($personal) === 1 && $personal[0]['user']['id'] === 1, 'Personal scope excludes other users');
 check($personal[0]['totals'] === $overview[0]['totals'], 'Admin and personal counts match');
+$teacherOverview = $service->summarize(
+    [$users[0], $users[2]],
+    $types,
+    [['user_id' => 3, 'leave_type_id' => 1, 'status' => 'Approved', 'days_count' => 12]]
+);
+check($teacherOverview[0]['totals']['remaining'] === 10.0, 'Male teacher balance excludes maternity quota');
+check($teacherOverview[1]['totals']['remaining'] === 20.0, 'Excess usage in one type does not consume another type balance');
 echo "$checks leave overview checks passed.\n";
