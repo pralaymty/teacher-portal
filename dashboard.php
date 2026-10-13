@@ -134,6 +134,7 @@ $notifications = $db->fetchAll(
                                             <span class="btn-text"><?= $hasLogoff ? 'Logged Off Today' : ($showLogoff ? 'Logoff' : ($attendanceOpenNow ? 'Mark Present' : 'Attendance Closed')) ?></span>
                                         </button>
                                         <?php if ($attendanceToday): ?>
+                                            <?php $attendanceNote = $attendanceToday['note'] ?? null; require __DIR__ . '/app/views/attendance-note.php'; ?>
                                             <div class="small text-muted mt-2">Login: <?= e(formatTime($attendanceToday['attendance_time'])) ?><?php if ($hasLogoff): ?> &middot; Logoff: <?= e(formatTime($attendanceToday['logoff_time'])) ?><?php endif; ?></div>
                                         <?php endif; ?>
                                         <?php if ($showLogoff && !$logoffOpenNow): ?>

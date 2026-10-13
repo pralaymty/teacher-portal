@@ -47,13 +47,14 @@ class LeaveCsvService
     {
         $name = strtolower(trim(preg_replace('/\s+/', ' ', $name)));
         // Use names rather than ambiguous codes such as ML (medical or maternity).
-        return match ($name) {
-            'casual', 'casual leave' => 0,
-            'medical', 'medical leave', 'leave on medical ground', 'leave on medical grounds', 'sick leave' => 1,
-            'child care leave', 'childcare leave', 'child care' => 2,
-            'maternity', 'maternity leave' => 3,
-            default => 4,
-        };
+        $categories = [
+            'casual' => 0, 'casual leave' => 0,
+            'medical' => 1, 'medical leave' => 1, 'leave on medical ground' => 1,
+            'leave on medical grounds' => 1, 'sick leave' => 1,
+            'child care leave' => 2, 'childcare leave' => 2, 'child care' => 2,
+            'maternity' => 3, 'maternity leave' => 3,
+        ];
+        return $categories[$name] ?? 4;
     }
 
     private function row($stream, array $values): void
@@ -62,6 +63,24 @@ class LeaveCsvService
             // Keep spreadsheet programs from evaluating user-controlled cells as formulas.
             return preg_match('/^[\s\x{FEFF}]*[=+@-]|^[\t\r\n]/u', $value) ? "'" . $value : $value;
         }, $values);
-        fputcsv($stream, $values, ',', '"', '', "\r\n");
+        // The custom line-ending argument is only available from PHP 8.1.
+        // Encode a row separately to preserve CRLF output on PHP 7.4 as well.
+        $rowStream = fopen('php://temp', 'w+');
+        if ($rowStream === false) {
+            throw new RuntimeException('Could not create the CSV row buffer.');
+        }
+        try {
+            if (fputcsv($rowStream, $values, ',', '"', '') === false) {
+                throw new RuntimeException('Could not encode the CSV row.');
+            }
+            rewind($rowStream);
+            $encoded = stream_get_contents($rowStream);
+            if ($encoded === false) {
+                throw new RuntimeException('Could not read the CSV row.');
+            }
+            fwrite($stream, substr($encoded, 0, -1) . "\r\n");
+        } finally {
+            fclose($rowStream);
+        }
     }
 }

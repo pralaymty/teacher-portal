@@ -147,3 +147,25 @@ details[open] summary { margin-bottom: 16px; }
     .login-card .card-body { padding: 28px !important; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+.attendance-note { position: relative; display: inline-block; cursor: help; color: #315a92; }
+.attendance-note-text {
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 100%;
+    z-index: 20;
+    width: 230px;
+    max-width: 65vw;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #18263b;
+    color: #fff;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    box-shadow: 0 4px 12px #0003;
+}
+.attendance-note:hover .attendance-note-text,
+.attendance-note:focus .attendance-note-text { display: block; }
+.day-item:nth-child(7n) .attendance-note-text { left: auto; right: 0; }

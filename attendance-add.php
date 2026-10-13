@@ -17,6 +17,11 @@ if (!isSuperAdminUser()) {
 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
 $date = trim((string) ($_POST['date'] ?? ''));
 $time = trim((string) ($_POST['time'] ?? date('H:i:s')));
+$note = $_POST['note'] ?? '';
+if (!is_string($note) || mb_strlen($note) > 500) {
+    jsonResponse(false, 'Attendance note must be 500 characters or less.');
+}
+$note = trim($note);
 
 if ($userId <= 0 || $date === '') {
     jsonResponse(false, 'Invalid parameters.');
@@ -36,7 +41,7 @@ if ($exists) {
 }
 
 try {
-    $db->execute('INSERT INTO teacher_attendance (user_id, attendance_date, attendance_time, latitude, longitude, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)', [$userId, $date, $time, $latitude, $longitude]);
+    $db->execute('INSERT INTO teacher_attendance (user_id, attendance_date, attendance_time, latitude, longitude, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)', [$userId, $date, $time, $latitude, $longitude, $note === '' ? null : $note]);
     jsonResponse(true, 'Attendance added successfully.');
 } catch (mysqli_sql_exception $e) {
     if (strpos($e->getMessage(), 'Duplicate entry') !== false) {

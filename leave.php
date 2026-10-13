@@ -71,13 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('leave.php');
 }
 
-$leaveOverview = null;
-if ((int) $_SESSION['user_type'] !== 1) {
-    $overviewTypes = $db->fetchAll(
-        'SELECT id, name, user_type_id, quota, gender_restriction, is_active FROM teacher_leave_types ORDER BY name, id'
-    );
-    $leaveOverview = (new LeaveOverviewService())->summarize([$currentUser], $overviewTypes, $applications)[0];
-}
+$overviewTypes = $db->fetchAll(
+    'SELECT id, name, user_type_id, quota, gender_restriction, is_active FROM teacher_leave_types ORDER BY name, id'
+);
+$leaveOverview = (new LeaveOverviewService())->summarize([$currentUser], $overviewTypes, $applications)[0];
 ?>
 <!DOCTYPE html>
 <html lang="en">

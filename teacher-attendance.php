@@ -19,8 +19,9 @@ $endDay = $startOfMonth->format('Y-m-t');
 
 $attendanceMap = [];
 $schoolLocation = SchoolLocationService::settings();
-foreach ($db->fetchAll('SELECT id, attendance_date, attendance_time, latitude, longitude, logoff_time, logoff_latitude, logoff_longitude FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?', [$userId, $startDay, $endDay]) as $row) {
+foreach ($db->fetchAll('SELECT id, attendance_date, attendance_time, latitude, longitude, logoff_time, logoff_latitude, logoff_longitude, note FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?', [$userId, $startDay, $endDay]) as $row) {
     $attendanceMap[$row['attendance_date']] = ['id' => $row['id'], 'time' => $row['attendance_time'],
+        'note' => $row['note'],
         'location' => SchoolLocationService::assess($row['latitude'], $row['longitude'], $schoolLocation),
         'logoff' => $row['logoff_time'] === null ? null : ['time' => $row['logoff_time'],
             'location' => SchoolLocationService::assess($row['logoff_latitude'], $row['logoff_longitude'], $schoolLocation)]];
@@ -91,6 +92,7 @@ foreach ($holidayRows as $holiday) {
                 <input type="hidden" name="user_id" value="<?= $userId ?>">
                 <div class="col-md-3"><input type="date" class="form-control" name="date" required></div>
                 <div class="col-md-3"><input type="time" class="form-control" name="time" value="<?= date('H:i') ?>" required></div>
+                <div class="col-md-3"><input type="text" class="form-control" name="note" maxlength="500" placeholder="Note (optional)" aria-label="Attendance note (optional, maximum 500 characters)"></div>
                 <div class="col-md-3"><button class="btn btn-primary" id="addAttendanceBtn">Add Attendance</button></div>
             </form>
         <?php else: ?>

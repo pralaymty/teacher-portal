@@ -13,10 +13,11 @@ $endDay = $startOfMonth->format('Y-m-t');
 $attendanceMap = [];
 $schoolLocation = SchoolLocationService::settings();
 foreach ($db->fetchAll(
-    'SELECT id, attendance_date, attendance_time, latitude, longitude, logoff_time, logoff_latitude, logoff_longitude FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?',
+    'SELECT id, attendance_date, attendance_time, latitude, longitude, logoff_time, logoff_latitude, logoff_longitude, note FROM teacher_attendance WHERE user_id = ? AND attendance_date >= ? AND attendance_date <= ?',
     [$userId, $startDay, $endDay]
 ) as $row) {
     $attendanceMap[$row['attendance_date']] = ['id' => $row['id'], 'time' => $row['attendance_time'],
+        'note' => $row['note'],
         'location' => SchoolLocationService::assess($row['latitude'], $row['longitude'], $schoolLocation),
         'logoff' => $row['logoff_time'] === null ? null : ['time' => $row['logoff_time'],
             'location' => SchoolLocationService::assess($row['logoff_latitude'], $row['logoff_longitude'], $schoolLocation)]];

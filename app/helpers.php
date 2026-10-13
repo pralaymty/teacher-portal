@@ -325,4 +325,5 @@ function ensurePortalSchema(): void
     }
     LeaveSettingsMigration::run($db);
     AttendanceLogoffMigration::run($db);
+    AttendanceNoteMigration::run($db);
 }

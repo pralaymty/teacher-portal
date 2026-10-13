@@ -93,3 +93,17 @@ check(strpos($html, '>Login</div>') !== false && strpos($html, '>Logoff</div>') 
 check(strpos($html, '04:15 PM') !== false, 'Logoff time missing.');
 check(strpos($html, 'text-danger fw-bold') !== false && strpos($html, 'text-success') !== false, 'Event locations must be assessed independently.');
 echo "4 calendar logoff checks passed.\n";
+
+foreach ([null, '', '   ', '<script>alert("note")</script>'] as $note) {
+    $attendanceEntry = ['time' => '10:35:00', 'location' => $inside, 'note' => $note];
+    ob_start();
+    require __DIR__ . '/../app/views/attendance-location.php';
+    $html = ob_get_clean();
+    $hasNote = trim((string) $note) !== '';
+    check((strpos($html, 'role="tooltip"') !== false) === $hasNote, 'Only nonblank notes should have a tooltip.');
+    if ($hasNote) {
+        check(strpos($html, '<script>') === false && strpos($html, e($note)) !== false, 'Note HTML must be escaped.');
+        check(strpos($html, 'tabindex="0"') !== false, 'Note must support keyboard focus.');
+    }
+}
+echo "6 attendance note display checks passed.\n";

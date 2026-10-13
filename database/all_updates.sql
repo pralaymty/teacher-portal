@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS `teacher_attendance` (
   `logoff_time` TIME NULL,
   `logoff_latitude` DECIMAL(10,8) NULL,
   `logoff_longitude` DECIMAL(11,8) NULL,
+  `note` VARCHAR(500) NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -152,6 +153,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
         AND TABLE_NAME = 'teacher_attendance' AND COLUMN_NAME = 'logoff_longitude') THEN
         ALTER TABLE teacher_attendance ADD COLUMN logoff_longitude DECIMAL(11,8) NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'teacher_attendance' AND COLUMN_NAME = 'note') THEN
+        ALTER TABLE teacher_attendance ADD COLUMN note VARCHAR(500) NULL;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
         AND TABLE_NAME = 'teacher_leave_types' AND COLUMN_NAME = 'user_type_id') THEN

@@ -8,6 +8,9 @@ foreach ($attendanceEvents as $eventLabel => $event):
 <div class="attendance-event <?= $eventLabel === 'Logoff' ? 'mt-2' : '' ?>">
 <div class="attendance-label <?= e($event['location']['class']) ?>"><?= e($eventLabel) ?></div>
 <div class="attendance-time small <?= e($event['location']['class']) ?>"><?= e(formatTime($event['time'])) ?></div>
+<?php if ($eventLabel === 'Login'): ?>
+    <?php $attendanceNote = $attendanceEntry['note'] ?? null; require __DIR__ . '/attendance-note.php'; ?>
+<?php endif; ?>
 <div class="attendance-location small <?= e($event['location']['class']) ?>">
     <?= e($event['location']['label']) ?>
     <?php if ($event['location']['distance_m'] !== null): ?>

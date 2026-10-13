@@ -44,7 +44,7 @@ foreach (['fresh', 'legacy'] as $scenario) {
             $conn->query("ALTER TABLE user ADD COLUMN gender ENUM('Male','Female','Other') NULL");
             $conn->query("UPDATE user SET gender = 'Female' WHERE id = 1");
             $conn->query('ALTER TABLE teacher_leave_types DROP INDEX uq_leave_type_role_code, DROP INDEX uq_leave_type_role_name, DROP COLUMN user_type_id, ADD UNIQUE KEY uq_leave_type_code (code), ADD UNIQUE KEY uq_leave_type_name (name)');
-            $conn->query('ALTER TABLE teacher_attendance DROP COLUMN latitude, DROP COLUMN longitude, DROP COLUMN logoff_time, DROP COLUMN logoff_latitude, DROP COLUMN logoff_longitude');
+            $conn->query('ALTER TABLE teacher_attendance DROP COLUMN latitude, DROP COLUMN longitude, DROP COLUMN logoff_time, DROP COLUMN logoff_latitude, DROP COLUMN logoff_longitude, DROP COLUMN note');
             $conn->query("INSERT INTO teacher_leave_types (id, name, code, quota, gender_restriction, is_active) VALUES (1, 'Casual', 'CL', 12, 'All', 1), (2, 'Study', 'ST', 0, 'All', 1)");
             $conn->query("INSERT INTO teacher_settings (setting_key, setting_value, setting_group) VALUES ('leave_quota_3_2', '4', 'leave'), ('attendance_entry_start_time', '09:15', 'attendance'), ('settings_user_type_ids', '[3,6]', 'general'), ('school_location', '{\"latitude\":22,\"longitude\":88,\"radius_m\":100}', 'attendance')");
             $conn->query("INSERT INTO teacher_leave_applications (user_id, leave_type_id, start_date, end_date, days_count, reason, status) VALUES (1, 1, '2026-01-01', '2026-01-01', 1, 'Test', 'Approved')");
@@ -56,6 +56,7 @@ foreach (['fresh', 'legacy'] as $scenario) {
         check($conn->query("SHOW COLUMNS FROM user LIKE 'gender'")->fetch_assoc()['Type'] === "enum('M','F')", 'Gender schema incorrect.');
         check($conn->query("SHOW COLUMNS FROM teacher_attendance LIKE 'latitude'")->num_rows === 1, 'Latitude column missing.');
         check($conn->query("SHOW COLUMNS FROM teacher_attendance LIKE 'longitude'")->num_rows === 1, 'Longitude column missing.');
+        check($conn->query("SHOW COLUMNS FROM teacher_attendance LIKE 'note'")->fetch_assoc()['Type'] === 'varchar(500)', 'Attendance note column missing or incorrect.');
         foreach (['logoff_time', 'logoff_latitude', 'logoff_longitude'] as $column) {
             check($conn->query("SHOW COLUMNS FROM teacher_attendance LIKE '" . $column . "'")->num_rows === 1, 'Logoff column missing.');
         }
@@ -78,7 +79,10 @@ foreach (['fresh', 'legacy'] as $scenario) {
         $conn->query("UPDATE teacher_leave_types SET quota = 7, is_active = 0 WHERE user_type_id = 3 AND code = 'CL'");
         $before = $conn->query('SELECT * FROM teacher_leave_types ORDER BY id')->fetch_all(MYSQLI_ASSOC);
         $conn->query("INSERT INTO teacher_attendance (user_id, attendance_date, attendance_time, logoff_time, logoff_latitude, logoff_longitude) VALUES (1, '2026-09-22', '10:30', '16:15', 22.5, 88.4)");
+        check($conn->query('SELECT note FROM teacher_attendance WHERE user_id = 1')->fetch_row()[0] === null, 'Omitted note must remain optional.');
+        $conn->query("UPDATE teacher_attendance SET note = 'Approved correction' WHERE user_id = 1");
         runSql($conn, $serverSql);
+        check($conn->query('SELECT note FROM teacher_attendance WHERE user_id = 1')->fetch_row()[0] === 'Approved correction', 'Reimport changed attendance note.');
         check($conn->query('SELECT logoff_time FROM teacher_attendance WHERE user_id = 1')->fetch_row()[0] === '16:15:00', 'Import changed logoff records.');
         check($conn->query('SELECT gender FROM user WHERE id = 1')->fetch_row()[0] === 'F', 'Reimport reset gender.');
         check($conn->query('SELECT * FROM teacher_leave_types ORDER BY id')->fetch_all(MYSQLI_ASSOC) === $before, 'Reimport changed leave data.');

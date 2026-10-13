@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS `teacher_attendance` (
   `logoff_time` TIME NULL,
   `logoff_latitude` DECIMAL(10,8) NULL,
   `logoff_longitude` DECIMAL(11,8) NULL,
+  `note` VARCHAR(500) NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
